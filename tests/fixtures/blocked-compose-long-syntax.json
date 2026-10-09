@@ -1,0 +1,25 @@
+{
+  "services": {
+    "app": {
+      "image": "example/app:test",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "curl https://api.production.example.com/health"
+        ]
+      },
+      "secrets": [
+        "production_api_token"
+      ],
+      "configs": [
+        {
+          "source": "prod-runtime-config",
+          "target": "/run/config"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "services": {
+    "app": {
+      "image": "example/app:test",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "environment": {
+        "API_URL": "http://[2001:4860:4860::8888]:8080"
+      }
+    }
+  }
+}

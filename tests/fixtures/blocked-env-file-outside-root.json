@@ -1,0 +1,13 @@
+{
+  "services": {
+    "app": {
+      "image": "example/app:test",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "env_file": [
+        "../outside.env"
+      ]
+    }
+  }
+}

@@ -60,6 +60,12 @@ Assert-GateCase 'blocked-sensitive-value.json' 'BLOCK' 30
 Assert-GateCase 'blocked-unlabeled-resources.json' 'BLOCK' 30
 Assert-GateCase 'ask-private-lan.json' 'ASK' 20
 Assert-GateCase 'ask-object-fixed-port.json' 'ASK' 20
+Assert-GateCase 'ask-localhost-fixed-port.json' 'ASK' 20
+Assert-GateCase 'ask-ipv6-listener.json' 'ASK' 20
+Assert-GateCase 'blocked-public-ipv6.json' 'BLOCK' 30
+Assert-GateCase 'blocked-env-file.json' 'BLOCK' 30
+Assert-GateCase 'blocked-env-file-outside-root.json' 'BLOCK' 30
+Assert-GateCase 'blocked-compose-long-syntax.json' 'BLOCK' 30
 
 $sensitiveValue = Invoke-JsonCommand -Script $scanner -Arguments @(
     '-InputPath', (Join-Path $fixtures 'blocked-sensitive-value.json'),
@@ -68,6 +74,14 @@ $sensitiveValue = Invoke-JsonCommand -Script $scanner -Arguments @(
 )
 Assert-True ($sensitiveValue.Output -notmatch 'fixture-sensitive-value-123') 'Sensitive values were not redacted from scanner output.'
 Assert-True ($sensitiveValue.Output -notmatch [regex]::Escape((Resolve-Path (Join-Path $fixtures 'blocked-sensitive-value.json')).Path)) 'Scanner output leaked the absolute fixture path.'
+
+$envFileValue = Invoke-JsonCommand -Script $scanner -Arguments @(
+    '-InputPath', (Join-Path $fixtures 'blocked-env-file.json'),
+    '-RunId', 'run-001',
+    '-RequireRunLabels'
+)
+Assert-True ($envFileValue.Output -notmatch 'fixture-env-secret-123') 'Env file sensitive values were not redacted from scanner output.'
+Assert-True ($envFileValue.Output -notmatch [regex]::Escape((Resolve-Path (Join-Path $fixtures 'unsafe.env')).Path)) 'Scanner output leaked the absolute env file path.'
 
 $missingRunId = Invoke-JsonCommand -Script $scanner -Arguments @(
     '-InputPath', (Join-Path $fixtures 'allowed-local.json'),

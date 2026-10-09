@@ -116,6 +116,9 @@ function Test-RemoteEndpoint {
     if ($v -match '(?<![\d.])(?:[1-9]\d?|1\d\d|2[0-1]\d|22[0-3])\.(?:\d{1,3}\.){2}\d{1,3}(?![\d.])' -and $v -notmatch '^(127|0)\.') {
         return $true
     }
+    if (Test-PublicIpv6Endpoint $v) {
+        return $true
+    }
     return $false
 }
 
@@ -127,6 +130,81 @@ function Test-PrivateLanEndpoint {
     }
 
     return $Value -match '(?<![\d.])(10\.(?:\d{1,3}\.){2}\d{1,3}|192\.168\.(?:\d{1,3}\.)\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.(?:\d{1,3}\.)\d{1,3})(?![\d.])'
+}
+
+function Get-Ipv6Candidates {
+    param([string]$Value)
+
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    foreach ($match in [regex]::Matches($Value, '\[([0-9a-fA-F:.%]+)\]')) {
+        $candidates.Add($match.Groups[1].Value) | Out-Null
+    }
+    foreach ($match in [regex]::Matches($Value, '(?<![\w.])([0-9a-fA-F]{0,4}:[0-9a-fA-F:.%]+)(?![\w.])')) {
+        $candidate = $match.Groups[1].Value.Trim(':')
+        if ($candidate -match ':') {
+            $candidates.Add($candidate) | Out-Null
+        }
+    }
+
+    return @($candidates | Select-Object -Unique)
+}
+
+function Get-ParsedIpAddress {
+    param([string]$Candidate)
+
+    $ip = $null
+    if ([System.Net.IPAddress]::TryParse(($Candidate -replace '%.*$', ''), [ref]$ip)) {
+        return $ip
+    }
+    return $null
+}
+
+function Test-LocalIpv6Address {
+    param([System.Net.IPAddress]$Ip)
+
+    return [System.Net.IPAddress]::IsLoopback($Ip)
+}
+
+function Test-PrivateIpv6Endpoint {
+    param([string]$Value)
+
+    foreach ($candidate in Get-Ipv6Candidates $Value) {
+        $ip = Get-ParsedIpAddress $candidate
+        if ($null -eq $ip -or $ip.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            continue
+        }
+
+        $normalized = $ip.ToString().ToLowerInvariant()
+        if (Test-LocalIpv6Address $ip) {
+            continue
+        }
+        if ($normalized -eq '::' -or $normalized.StartsWith('fe80:') -or $normalized.StartsWith('fc') -or $normalized.StartsWith('fd')) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-PublicIpv6Endpoint {
+    param([string]$Value)
+
+    foreach ($candidate in Get-Ipv6Candidates $Value) {
+        $ip = Get-ParsedIpAddress $candidate
+        if ($null -eq $ip -or $ip.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            continue
+        }
+
+        if (Test-LocalIpv6Address $ip) {
+            continue
+        }
+        if (Test-PrivateIpv6Endpoint "[$candidate]") {
+            continue
+        }
+        return $true
+    }
+
+    return $false
 }
 
 function Get-ObjectProperty {
@@ -169,7 +247,8 @@ function Test-HasLabel {
 function Inspect-Scalar {
     param(
         [string]$Field,
-        [object]$Value
+        [object]$Value,
+        [string]$Source = $InputPath
     )
 
     $text = ConvertTo-StringValue $Value
@@ -178,17 +257,95 @@ function Inspect-Scalar {
     }
 
     if ((Test-SensitiveName $Field) -and -not (Test-TestCredential $Value)) {
-        Add-Finding (New-Finding 'BLOCK' 'CRITICAL' $InputPath $Field $Value 'Generated runtime config contains a credential-like value that is not clearly dummy or test-only.' 'Replace with a dummy local credential and keep secret values out of rendered output.')
+        Add-Finding (New-Finding 'BLOCK' 'CRITICAL' $Source $Field $Value 'Generated runtime config contains a credential-like value that is not clearly dummy or test-only.' 'Replace with a dummy local credential and keep secret values out of rendered output.')
         return
     }
 
-    if (Test-PrivateLanEndpoint $text) {
-        Add-Finding (New-Finding 'ASK' 'HIGH' $InputPath $Field $text 'Private LAN endpoints are not local by default.' 'Get explicit approval for the exact target or replace with a local mock.')
+    if ((Test-PrivateLanEndpoint $text) -or (Test-PrivateIpv6Endpoint $text)) {
+        Add-Finding (New-Finding 'ASK' 'HIGH' $Source $Field $text 'Private LAN endpoints are not local by default.' 'Get explicit approval for the exact target or replace with a local mock.')
         return
     }
 
     if (Test-RemoteEndpoint $text) {
-        Add-Finding (New-Finding 'BLOCK' 'CRITICAL' $InputPath $Field $text 'Generated runtime config references a public, production, or remote endpoint.' 'Replace with a local service, mock, or explicitly approved test endpoint.')
+        Add-Finding (New-Finding 'BLOCK' 'CRITICAL' $Source $Field $text 'Generated runtime config references a public, production, or remote endpoint.' 'Replace with a local service, mock, or explicitly approved test endpoint.')
+    }
+}
+
+function Resolve-EnvFilePath {
+    param(
+        [string]$EnvFile,
+        [string]$BaseDirectory
+    )
+
+    if ([string]::IsNullOrWhiteSpace($EnvFile)) {
+        return $null
+    }
+    if ([System.IO.Path]::IsPathRooted($EnvFile)) {
+        return [System.IO.Path]::GetFullPath($EnvFile)
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $EnvFile))
+}
+
+function Test-IsPathUnderDirectory {
+    param(
+        [string]$Path,
+        [string]$Directory
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $fullDirectory = [System.IO.Path]::GetFullPath($Directory).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    return $fullPath.StartsWith($fullDirectory + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or $fullPath.Equals($fullDirectory, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-EnvFilePathFromEntry {
+    param([object]$Entry)
+
+    if ($Entry -is [string]) {
+        return $Entry
+    }
+    return ConvertTo-StringValue (Get-ObjectProperty $Entry 'path')
+}
+
+function Inspect-EnvFile {
+    param(
+        [string]$Field,
+        [object]$EnvFile,
+        [string]$BaseDirectory
+    )
+
+    $envFileText = Get-EnvFilePathFromEntry $EnvFile
+    Inspect-Scalar $Field $envFileText
+    if ([string]::IsNullOrWhiteSpace($envFileText)) {
+        return
+    }
+
+    $resolvedPath = Resolve-EnvFilePath $envFileText $BaseDirectory
+    if (-not (Test-IsPathUnderDirectory $resolvedPath $BaseDirectory)) {
+        Add-Finding (New-Finding 'BLOCK' 'HIGH' $InputPath $Field $envFileText 'env_file points outside the rendered config directory.' 'Keep env files inside the generated test workspace and re-render the config.')
+        return
+    }
+    if (-not (Test-Path -LiteralPath $resolvedPath)) {
+        Add-Finding (New-Finding 'BLOCK' 'HIGH' $InputPath $Field $envFileText 'env_file was referenced but could not be read.' 'Render or copy the test-only env file into the generated test workspace before scanning.')
+        return
+    }
+
+    $lineNumber = 0
+    foreach ($line in Get-Content -LiteralPath $resolvedPath) {
+        $lineNumber++
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) {
+            continue
+        }
+
+        $assignment = $trimmed -replace '^(?i)export\s+', ''
+        $separator = $assignment.IndexOf('=')
+        if ($separator -lt 1) {
+            continue
+        }
+
+        $key = $assignment.Substring(0, $separator).Trim()
+        $value = $assignment.Substring($separator + 1).Trim().Trim('"').Trim("'")
+        Inspect-Scalar "$Field.$key" $value $resolvedPath
     }
 }
 
@@ -209,6 +366,10 @@ function Inspect-Volume {
 
     if ($text -match '(^|:)(/|/proc|/sys|/root|/home|C:\\|C:/)(:|$)') {
         Add-Finding (New-Finding 'BLOCK' 'CRITICAL' $InputPath $Field $text 'Broad or sensitive host path mount is not allowed for a generic local test.' 'Mount only a generated test workspace path.')
+    }
+
+    foreach ($volumeField in @('type', 'source', 'target', 'read_only', 'consistency', 'bind', 'volume')) {
+        Inspect-Scalar "$Field.$volumeField" (Get-ObjectProperty $Volume $volumeField)
     }
 }
 
@@ -243,11 +404,21 @@ function Inspect-Port {
         Add-Finding (New-Finding 'ASK' 'WARN' $InputPath $Field $Port 'Fixed or broadly bound host ports may collide with another run or expose services.' 'Use dynamically allocated localhost ports or document the explicit approval.')
         return
     }
+    if ($portText -match '^(?:[A-Za-z0-9_.-]+:)?\d+:\d+(?:/(tcp|udp))?$' -or $portText -match '^\[[^\]]+\]:\d+:\d+(?:/(tcp|udp))?$') {
+        Add-Finding (New-Finding 'ASK' 'WARN' $InputPath $Field $Port 'Fixed or broadly bound host ports may collide with another run or expose services.' 'Use dynamically allocated localhost ports or document the explicit approval.')
+        return
+    }
 
     $published = Get-ObjectProperty $Port 'published'
     $hostIp = ConvertTo-StringValue (Get-ObjectProperty $Port 'host_ip')
     if ($null -ne $published -or $hostIp -match '^(0\.0\.0\.0|::)$') {
         Add-Finding (New-Finding 'ASK' 'WARN' $InputPath $Field $Port 'Fixed or broadly bound host ports may collide with another run or expose services.' 'Use dynamically allocated localhost ports or document the explicit approval.')
+    }
+    if ((ConvertTo-StringValue (Get-ObjectProperty $Port 'mode')) -match '(?i)^host$') {
+        Add-Finding (New-Finding 'ASK' 'WARN' $InputPath "$Field.mode" (Get-ObjectProperty $Port 'mode') 'Port uses host publish mode.' 'Use isolated dynamic localhost ports or document the explicit approval.')
+    }
+    foreach ($portField in @('host_ip', 'mode', 'protocol', 'name', 'app_protocol', 'target', 'published')) {
+        Inspect-Scalar "$Field.$portField" (Get-ObjectProperty $Port $portField)
     }
 }
 
@@ -258,6 +429,7 @@ if (-not (Test-Path -LiteralPath $InputPath)) {
 $script:findings = [System.Collections.Generic.List[object]]::new()
 $config = Get-Content -LiteralPath $InputPath -Raw | ConvertFrom-Json
 $services = Get-ObjectProperty $config 'services'
+$inputDirectory = Split-Path -Parent ([System.IO.Path]::GetFullPath($InputPath))
 
 if ($RequireRunLabels -and [string]::IsNullOrWhiteSpace($RunId)) {
     Add-Finding (New-Finding 'BLOCK' 'HIGH' $InputPath 'RunId' $RunId 'Run label validation was requested but no RunId was provided.' 'Pass -RunId for the current environment.')
@@ -315,8 +487,15 @@ foreach ($serviceProperty in @($services.PSObject.Properties)) {
         }
     }
 
-    foreach ($field in @('command', 'entrypoint', 'extra_hosts', 'dns', 'env_file')) {
+    foreach ($field in @('command', 'entrypoint', 'extra_hosts', 'dns', 'healthcheck', 'logging', 'sysctls', 'ulimits', 'secrets', 'configs')) {
         Inspect-Scalar "$prefix.$field" (Get-ObjectProperty $service $field)
+    }
+
+    $envFiles = @(Get-ObjectProperty $service 'env_file')
+    if ($null -ne $envFiles -and $envFiles.Count -gt 0) {
+        for ($i = 0; $i -lt $envFiles.Count; $i++) {
+            Inspect-EnvFile "$prefix.env_file[$i]" $envFiles[$i] $inputDirectory
+        }
     }
 
     $volumes = @(Get-ObjectProperty $service 'volumes')
