@@ -1,0 +1,14 @@
+{
+  "services": {
+    "app": {
+      "image": "example/app:test",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "environment": {
+        "API_TOKEN": "fixture-sensitive-value-123",
+        "DB_PASSWORD": "dummy-test-password"
+      }
+    }
+  }
+}

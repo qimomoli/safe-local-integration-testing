@@ -1,0 +1,11 @@
+{
+  "compose_project": "test-project-run-001",
+  "resource_label": "com.qimomoli.test-run=run-001",
+  "resources": {
+    "containers": [
+      "container-001"
+    ],
+    "networks": [],
+    "volumes": []
+  }
+}

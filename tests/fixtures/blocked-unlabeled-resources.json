@@ -1,0 +1,28 @@
+{
+  "services": {
+    "app": {
+      "image": "example/app:test",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "networks": [
+        "test-net"
+      ],
+      "volumes": [
+        "runtime-data:/app/runtime"
+      ]
+    }
+  },
+  "networks": {
+    "test-net": {
+      "name": "test-net-run-001"
+    }
+  },
+  "volumes": {
+    "runtime-data": {
+      "labels": {
+        "com.qimomoli.test-run": "other-run"
+      }
+    }
+  }
+}

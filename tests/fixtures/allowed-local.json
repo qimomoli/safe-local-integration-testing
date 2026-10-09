@@ -1,0 +1,39 @@
+{
+  "services": {
+    "app": {
+      "image": "example/app:test",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "environment": {
+        "DB_HOST": "mysql",
+        "CACHE_URL": "redis://redis:6379",
+        "CALLBACK_URL": "http://host.docker.internal:18080/callback",
+        "TEST_TOKEN": "dummy-test-token"
+      },
+      "ports": [
+        "127.0.0.1::8080"
+      ],
+      "volumes": [
+        "./runtime:/app/runtime:rw"
+      ]
+    },
+    "mysql": {
+      "image": "mysql:8.4",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "networks": [
+        "test-net"
+      ]
+    }
+  },
+  "networks": {
+    "test-net": {
+      "name": "test-net-run-001",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      }
+    }
+  }
+}

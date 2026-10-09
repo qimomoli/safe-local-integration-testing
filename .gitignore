@@ -1,0 +1,15 @@
+# IDE metadata
+.idea/
+
+# Generated local test state
+.env
+.env.*
+!.env.example
+compose.generated.yml
+docker-compose.generated.yml
+runtime-config/
+test-workspaces/
+diagnostic-bundles/
+logs/
+screenshots/
+*.har

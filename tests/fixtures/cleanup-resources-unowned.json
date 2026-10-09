@@ -1,0 +1,11 @@
+{
+  "resources": [
+    {
+      "id": "container-001",
+      "type": "container",
+      "labels": {
+        "com.docker.compose.project": "test-project-run-001"
+      }
+    }
+  ]
+}

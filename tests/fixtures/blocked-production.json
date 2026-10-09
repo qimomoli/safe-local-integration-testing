@@ -1,0 +1,14 @@
+{
+  "services": {
+    "app": {
+      "image": "example/app:production",
+      "labels": {
+        "com.qimomoli.test-run": "run-001"
+      },
+      "environment": {
+        "DB_HOST": "prod-db.example.com",
+        "API_URL": "https://api.production.example.com"
+      }
+    }
+  }
+}

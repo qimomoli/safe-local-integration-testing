@@ -1,0 +1,2 @@
+display_name: Safe Local Docker Integration
+short_description: Isolated local Docker integration testing without touching production config or shared infrastructure.

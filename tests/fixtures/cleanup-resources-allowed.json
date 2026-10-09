@@ -1,0 +1,20 @@
+{
+  "resources": [
+    {
+      "id": "container-001",
+      "type": "container",
+      "labels": {
+        "com.qimomoli.test-run": "run-001",
+        "com.docker.compose.project": "test-project-run-001"
+      }
+    },
+    {
+      "id": "network-001",
+      "type": "network",
+      "labels": {
+        "com.qimomoli.test-run": "run-001",
+        "com.docker.compose.project": "test-project-run-001"
+      }
+    }
+  ]
+}
