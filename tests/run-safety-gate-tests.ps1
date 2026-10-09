@@ -106,3 +106,4 @@ Assert-True ($missingManifestProject.Json.decision -eq 'BLOCK') 'Missing manifes
 Assert-True ($missingManifestProject.Output -notmatch [regex]::Escape((Resolve-Path (Join-Path $fixtures 'cleanup-resources-allowed.json')).Path)) 'Cleanup guard output leaked the absolute resources path.'
 
 Write-Output 'Safety gate and cleanup ownership tests passed.'
+exit 0
