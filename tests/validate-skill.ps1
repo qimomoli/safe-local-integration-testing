@@ -53,6 +53,11 @@ Assert-Contains $skill 'diagnostic bundle' 'SKILL.md must define failure evidenc
 Assert-Contains $skill 'environment-manifest.md' 'SKILL.md must reference the environment manifest.'
 Assert-Contains $skill 'confirm-before-work' 'SKILL.md must integrate file-write confirmation boundaries.'
 Assert-Contains $skill 'name: safe-local-docker-integration' 'SKILL.md frontmatter must match the installable skill folder.'
+Assert-Contains $skill 'END_TO_END' 'SKILL.md must require end-to-end coverage for the changed behavior.'
+Assert-Contains $skill 'real entry point' 'SKILL.md must identify the real entry point of the changed behavior.'
+Assert-Contains $skill 'real exit' 'SKILL.md must verify the real observable exit of the changed behavior.'
+Assert-Contains $skill 'mock cannot replace' 'SKILL.md must prevent mocks from replacing the changed integration path.'
+Assert-Contains $skill 'partial' 'SKILL.md must classify incomplete end-to-end coverage as partial.'
 
 Assert-Contains $gate 'com.qimomoli.test-run' 'Safety gate must require resource ownership labels.'
 Assert-Contains $gate 'pid: host' 'Safety gate must block host PID namespaces.'
@@ -63,6 +68,9 @@ Assert-Contains $gate 'host.docker.internal' 'Safety gate must define the host c
 Assert-Contains $gate 'private LAN' 'Safety gate must define the private LAN policy.'
 Assert-Contains $gate 'scripts/safety-gate.ps1' 'Safety gate must reference the automated scanner.'
 Assert-Contains $gate 'scripts/cleanup-guard.ps1' 'Safety gate must reference the cleanup guard.'
+Assert-Contains $gate 'cross-service' 'Safety gate must require cross-service evidence for changed integration paths.'
+Assert-Contains $gate 'real protocol' 'Safety gate must require real protocols at changed service boundaries.'
+Assert-Contains $gate 'single-service' 'Safety gate must distinguish single-service checks from integration evidence.'
 
 Assert-Contains $manifest 'run_id' 'Environment manifest must identify the run.'
 Assert-Contains $manifest 'com.qimomoli.test-run' 'Environment manifest must define the resource label.'
@@ -71,6 +79,9 @@ Assert-Contains $manifest 'cleanup_owner' 'Environment manifest must define clea
 Assert-Contains $report 'Verdict' 'Report template must provide a verdict.'
 Assert-Contains $report 'Safety gate' 'Report template must summarize the safety gate.'
 Assert-Contains $report 'Preserved evidence' 'Report template must report retained evidence.'
+Assert-Contains $report 'Coverage path' 'Report template must record the end-to-end coverage path.'
+Assert-Contains $report 'real service boundaries' 'Report template must record real service boundaries.'
+Assert-Contains $report 'mock or stub' 'Report template must disclose mock or stub usage.'
 
 Assert-Contains $scanner 'Protect-ObservedValue' 'Safety scanner must redact sensitive observed values.'
 Assert-Contains $scanner 'networks' 'Safety scanner must inspect top-level network ownership.'

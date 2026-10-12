@@ -44,6 +44,20 @@ Use different decisions for source evidence and generated runtime config:
 - **Generated or effective runtime config:** generated compose/env/config files, `docker compose config` output, process environment, service-discovery data, seeded runtime config, and live container/application config must be local-only. Any remaining production or remote endpoint here is a blocker.
 - **Direct source use:** if a source repository config file is selected as an active runtime input without a generated local override, treat it as generated/effective runtime config for this gate.
 
+## Cross-Service Integration Gate
+
+The safety gate protects the environment; it does not make a single-service check equivalent to integration testing. Before functional testing, record an `END_TO_END` path:
+
+```text
+real entry point -> changed service(s) -> real protocol -> real downstream service(s) -> real exit
+```
+
+- For a cross-service change, the changed boundaries must be exercised with real protocols and real local containers or test-only dependencies. A mock cannot replace a changed service boundary.
+- A health endpoint, direct internal API call, single-service smoke test, published-message assertion, or mock-only test is supplementary evidence. It is not sufficient for a `passed` integration verdict.
+- For asynchronous paths, verify message consumption, downstream state transition, and the final caller-visible or business-visible result.
+- Mocks or stubs are allowed only for dependencies outside the changed path, and the report must name them and explain the boundary they do not cover.
+- If the real entry-to-exit path cannot be completed safely, return `partial` or `blocked`, identify the exact missing service boundary, and do not upgrade the result to `passed`.
+
 ## Blockers
 
 Block the run when generated or effective runtime config contains:
@@ -133,6 +147,7 @@ cleanup result:
 
 Redact secrets. Do not paste full tokens, passwords, or keys into chat or reports.
 Record the Docker context and resource ownership evidence for every run.
+Record the `END_TO_END` path, changed service boundaries, real protocol used at each boundary, per-hop evidence, final observable result, and any mock or stub used outside the changed path.
 
 ## Frontend And Browser URLs
 

@@ -27,24 +27,41 @@ When `confirm-before-work` or an equivalent workspace-write confirmation rule is
 - Use dummy credentials and local mocks. Do not copy production `.env` files, secrets, tokens, certificates, or customer data into the generated workspace.
 - Do not delete Docker volumes, prune images, remove unrelated containers, or clean databases outside the current test project. Operations inside containers and current-environment resources may be automated after ownership is proven.
 - After a successful report, clean generated workspace files by default. On failure or interruption, preserve a minimal diagnostic bundle until the user confirms it is no longer needed.
+- A Docker integration run exists to validate the changed behavior across its real service boundaries, not merely to prove that containers start or that one service answers a request.
 
 ## Execution Phases
 
 Run these phases in order. A blocker in one phase stops later phases.
 
-1. **PREFLIGHT**: identify the smallest integration scope, inspect project docs and source runtime config, verify required tools, and prove the Docker context is local and intended.
+1. **PREFLIGHT**: identify the smallest complete integration scope, define the real entry point and real exit for the changed behavior, map every changed service boundary, inspect project docs and source runtime config, verify required tools, and prove the Docker context is local and intended.
 2. **PREPARE**: create a unique run id, workspace, environment manifest, local-only overrides, mock configuration, and test data namespace outside the application repository.
 3. **RENDER**: render effective configuration, such as `docker compose config`, and collect image, endpoint, mount, port, secret, network, and namespace evidence.
 4. **SAFETY_GATE**: apply [references/safety-gate.md](references/safety-gate.md) and, when possible, `scripts/safety-gate.ps1` to generated files, rendered output, process environment, and any live runtime configuration. Continue only with `ALLOW` or after every `REPLACE` is applied and rechecked.
 5. **START**: start only the selected compose project and only after the gate has no blockers. Do not use global prune or cleanup commands.
 6. **HEALTH_CHECK**: verify infrastructure readiness and record the actual container, network, volume, and port identities.
-7. **FUNCTIONAL_TEST**: run the smallest business-level smoke test. Health checks alone cannot produce a passing integration-test verdict.
+7. **FUNCTIONAL_TEST**: run the complete entry-to-exit business path for the changed behavior. Use the real entry point, real containers, real protocols, real downstream dependencies inside the changed path, and verify the real exit. Health checks, single-service checks, and mock-only checks are supplementary evidence and cannot produce a passing integration-test verdict for a cross-service change.
 8. **REPORT**: use [references/report-template.md](references/report-template.md). Include browser URL and navigation steps when a human must inspect a UI.
 9. **CLEANUP**: after success, remove only resources proven by the manifest, project name, and labels to belong to this run. After failure or interruption, preserve the diagnostic bundle and perform only ownership-proven cleanup.
 
 If generated or effective runtime config cannot prove that runtime endpoints are local and test-only, stop and report the blocker instead of starting containers. Do not stop merely because a checked-in source file contains production values that will be overridden in the generated test workspace.
 
 Once the current environment is proven isolated through the manifest, compose project, and `com.qimomoli.test-run=<run_id>` label, do not ask the user to approve every test-internal operation. Automatically initialize, reset, seed, restart, and clean the current test containers and their scoped data as needed. Stop only when the operation could affect a resource outside the current environment.
+
+## End-To-End Coverage Contract
+
+Every integration run must declare an `END_TO_END` coverage path before starting functional tests:
+
+```text
+real entry point -> changed service(s) -> real downstream boundary(ies) -> real exit
+```
+
+- The **real entry point** is the user-visible action, public HTTP/RPC endpoint, published message, CLI command, or other boundary that the changed behavior actually receives. Do not start at an internal method when a real boundary is available.
+- The **real exit** is the final observable business result: the response consumed by the caller, the visible UI state, the persisted state later read by the caller, or the event consumed by the next real service.
+- If the change crosses services, start the required local services and exercise every changed boundary with the real protocol: HTTP, RPC, database, cache, broker, object storage, or service discovery as applicable. A mock cannot replace a changed service boundary.
+- Mocks or stubs may cover only dependencies outside the changed path, such as an intentionally unavailable third-party payment or SMS provider. Record each one and explain why it is outside the changed behavior.
+- A single-service test, direct database assertion, health endpoint, or mock-only test may supplement the run, but cannot be the primary integration evidence when the changed behavior crosses services.
+- For asynchronous flows, wait for and verify the final business result after the message is consumed and downstream state is updated. “Message published” or “worker is healthy” is not an end-to-end pass.
+- If the complete path cannot be exercised safely or the final result cannot be observed, classify the run as `partial` or `blocked`, identify the exact missing hop, and do not report `passed`.
 
 ## Current-Environment Operations
 
@@ -91,7 +108,10 @@ At minimum:
 - Environment identity is clear: run id, workspace, manifest, compose project, resource labels, actual port mappings, data namespace, and cleanup behavior.
 - Docker context is local and intended; `DOCKER_HOST` is absent or explicitly approved as local.
 - Infrastructure health checks pass before application tests.
-- Application smoke tests verify the behavior under test, not just process liveness.
+- Application tests start at the real entry point and verify the complete changed behavior through the real exit, not just process liveness or one service's response.
+- Every changed cross-service boundary is exercised with a real protocol and a real local dependency, unless it is explicitly outside the changed path and documented as a mock or stub.
+- The report includes the `END_TO_END` coverage path, per-hop evidence, real service boundaries, final observable result, and any missing hop.
+- Single-service, unit, contract, or mock tests are reported as supplementary checks and never substituted for required cross-service integration coverage.
 - Browser-facing URLs use `127.0.0.1`, localhost, an explicitly chosen LAN host, or a test-only hostname that a human can open. Do not present Docker-only service names as frontend URLs for manual confirmation.
 - Frontend smoke tests verify the user can reach the target page and see the target effect. If the page cannot be viewed, report the exact step where it fails and whether the cause is missing config, missing data, missing permission, bad route, or backend/API failure.
 - The final response includes a concise test report directly in the conversation. Do not require a separate report file unless the user asks for one.
@@ -110,6 +130,10 @@ At minimum:
 | Reusing one local environment for multiple requirements | Generate a distinct environment id and isolated ports/names/data |
 | Asking for approval for every isolated test reset | Prove the target belongs to the current environment, then run it |
 | Trusting a health endpoint as full proof | Also test the cross-service behavior under review |
+| Starting from an internal API or asserting only a database row | Begin at the real entry point and verify the real exit |
+| Replacing a changed downstream service with a mock | Start the real local dependency and use its real protocol |
+| Treating a published message or healthy worker as the final result | Wait for consumption and verify the final business-visible result |
+| Calling a single-service smoke test an integration pass | Mark it supplementary; use `partial` or `blocked` when the complete path is not covered |
 | Giving only a frontend URL | Include navigation steps, auth context, permissions, and test data |
 | Producing a huge report | Summarize high-signal results and short log excerpts |
 | Reporting a failure without guidance | Include likely cause, fix recommendation, and next verification step |
