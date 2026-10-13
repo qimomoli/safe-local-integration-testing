@@ -11,14 +11,38 @@ Use this skill for any project where local Docker integration testing must be is
 
 This skill is an operating procedure, not a security sandbox. Docker daemon permissions, network policy, credential management, and CI isolation remain required controls.
 
-When `confirm-before-work` or an equivalent workspace-write confirmation rule is active, that rule governs every generated workspace, manifest, rendered config, diagnostic bundle, log, screenshot, report, and cleanup deletion. This skill decides what is safe to create or clean; it does not bypass required file-write confirmation.
+When `confirm-before-work` or an equivalent workspace-write confirmation rule is active, that rule is the authoritative confirmation protocol. If it is not available, use the built-in Side-Effect Confirmation section below. This skill decides what is safe to create or clean; it does not bypass required confirmation before side effects.
+
+## Side-Effect Confirmation
+
+Before any action that can create, edit, delete, start, stop, restart, publish, send, reset, clean, or otherwise change local or external state, pause and ask for explicit confirmation.
+
+This includes:
+
+- creating, editing, or deleting generated workspaces, compose files, env files, manifests, logs, screenshots, reports, or diagnostic bundles
+- starting, stopping, restarting, rebuilding, or deleting containers, networks, images, volumes, services, or Docker contexts
+- initializing, seeding, migrating, resetting, truncating, deleting, or cleaning databases, caches, queues, topics, buckets, service-discovery namespaces, or other runtime state
+- pulling images or packages, using external registries, publishing reports or messages, creating commits, pushing code, tagging releases, or otherwise publishing state
+
+Before the action, state:
+
+- exact action
+- target files, repositories, services, resources, endpoints, or bounded patterns
+- intended change
+- likely side effects
+- cleanup or retention boundary
+- assumptions and open questions
+
+Wait for explicit confirmation before performing the action. Confirmation applies only to the listed scope. If the action, target, side effect, retention boundary, or external destination changes, ask again before continuing.
+
+Read-only inspection does not require confirmation when it does not create files, change runtime state, transmit user data, or affect an external system. Treat uncertain commands as side-effect-capable and ask first.
 
 ## Core Boundaries
 
 - Treat application repositories as read-only inputs unless the user explicitly approves a separate code/config change.
 - Do not edit checked-in `.env*`, `application*.yml`, `application*.properties`, Dockerfiles, compose files, migrations, or production runtime config just to make local tests work.
 - Generate compose files, env files, mock config, seed data, and temporary logs in a separate test workspace only for the duration of the run.
-- Before creating or deleting generated files, present the `confirm-before-work` understanding check with the workspace path, expected artifacts, retention policy, and cleanup boundary.
+- Before creating or deleting generated files, present the Side-Effect Confirmation check with the workspace path, expected artifacts, retention policy, and cleanup boundary.
 - Give every concurrent requirement or run a distinct test environment id. Create an environment manifest and apply `com.qimomoli.test-run=<run_id>` labels to every Docker resource that this run owns. See [references/environment-manifest.md](references/environment-manifest.md).
 - Use the id in the workspace path, compose project name, Docker network, container/volume names, host ports, database/schema names, service-discovery namespace, object-storage bucket, topic prefix, test user/data ids, and frontend URL reporting. Prefer dynamically allocated host ports and record the actual mappings.
 - Do not connect to production or shared remote databases, caches, brokers, service discovery, object storage, auth, payment, SMS, or API gateways.
@@ -117,7 +141,7 @@ At minimum:
 - The final response includes a concise test report directly in the conversation. Do not require a separate report file unless the user asks for one.
 - The test report is concise and human-readable. Lead with conclusion, URLs, navigation steps, results, blockers, cleanup result, and next actions. Do not paste long logs; include short relevant excerpts before cleanup, and include log paths only when logs were explicitly preserved.
 - The test report records selected mode, run id, test time, workspace path while active, compose project, port mappings, data namespace, started services, frontend URLs when applicable, backend/API URLs, health checks, smoke tests, failed or blocked checks, skipped checks, manual verification items, preserved evidence, and cleanup result. Keep it roughly one to two screens unless there are many real failures.
-- File creation, file deletion, and diagnostic preservation honor `confirm-before-work` when that skill is active.
+- File creation, file deletion, diagnostic preservation, Docker lifecycle operations, runtime data changes, and publication actions honor `confirm-before-work` when that skill is active, or the built-in Side-Effect Confirmation protocol otherwise.
 - When behavior does not match expectations, include failure symptom, expected result, actual result, likely cause, recommended fix, and the next verification step in the conversation.
 
 ## Common Mistakes

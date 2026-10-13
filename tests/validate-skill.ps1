@@ -58,6 +58,11 @@ Assert-Contains $skill 'real entry point' 'SKILL.md must identify the real entry
 Assert-Contains $skill 'real exit' 'SKILL.md must verify the real observable exit of the changed behavior.'
 Assert-Contains $skill 'mock cannot replace' 'SKILL.md must prevent mocks from replacing the changed integration path.'
 Assert-Contains $skill 'partial' 'SKILL.md must classify incomplete end-to-end coverage as partial.'
+Assert-Contains $skill 'explicit confirmation' 'SKILL.md must require explicit confirmation before side effects.'
+Assert-Contains $skill 'side effect' 'SKILL.md must define the side-effect confirmation boundary.'
+Assert-Contains $skill 'Confirmation applies only to the listed scope' 'SKILL.md must scope confirmation to the approved operation.'
+Assert-Contains $skill 'Read-only inspection does not require confirmation' 'SKILL.md must exempt read-only inspection from confirmation.'
+Assert-Contains $skill 'confirm-before-work' 'SKILL.md must define the relationship with the optional full confirmation skill.'
 
 Assert-Contains $gate 'com.qimomoli.test-run' 'Safety gate must require resource ownership labels.'
 Assert-Contains $gate 'pid: host' 'Safety gate must block host PID namespaces.'
