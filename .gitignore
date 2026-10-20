@@ -1,5 +1,6 @@
 # IDE metadata
 .idea/
+.idea.backup/
 
 # Generated local test state
 .env

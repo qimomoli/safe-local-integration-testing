@@ -3,7 +3,14 @@ param(
     [string]$ManifestPath,
 
     [Parameter(Mandatory = $true)]
-    [string]$ResourcesPath
+    [string]$ResourcesPath,
+
+    [string]$OutFile = "",
+
+    [switch]$Compact,
+
+    [ValidateRange(1, 100)]
+    [int]$MaxDisplayedFindings = 12
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +58,33 @@ function Protect-ObservedValue {
     $text = $text -replace '(?i)(C:\\Users\\)[^\\/:*?"<>|\s]+', '$1[REDACTED]'
     $text = $text -replace '(?i)(/Users/)[^/\s]+', '$1[REDACTED]'
     return $text
+}
+
+function Limit-CompactText {
+    param(
+        [object]$Value,
+        [int]$MaxLength
+    )
+
+    $text = if ($null -eq $Value) { '' } elseif ($Value -is [string]) { $Value } else { $Value | ConvertTo-Json -Compress -Depth 20 }
+    if ($text.Length -le $MaxLength) {
+        return $text
+    }
+    return $text.Substring(0, $MaxLength) + '...'
+}
+
+function ConvertTo-CompactFinding {
+    param([object]$Finding)
+
+    [pscustomobject]@{
+        decision = $Finding.decision
+        severity = $Finding.severity
+        source = $Finding.source
+        field = $Finding.field
+        observed = Limit-CompactText $Finding.observed 240
+        reason = Limit-CompactText $Finding.reason 200
+        required_action = Limit-CompactText $Finding.required_action 200
+    }
 }
 
 function Get-ObjectProperty {
@@ -147,7 +181,27 @@ $result = [pscustomobject]@{
     findings = @($findings)
 }
 
-$result | ConvertTo-Json -Depth 20
+$json = $result | ConvertTo-Json -Depth 20
+if ($OutFile) {
+    $parent = Split-Path -Parent $OutFile
+    if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+    Set-Content -LiteralPath $OutFile -Value $json -Encoding UTF8
+}
+
+if ($Compact) {
+    $sampleFindings = @($findings | Select-Object -First $MaxDisplayedFindings | ForEach-Object { ConvertTo-CompactFinding $_ })
+    [pscustomobject]@{
+        output_mode = 'compact'
+        schema_version = 1
+        decision = $decision
+        finding_count = $findings.Count
+        sample_findings = $sampleFindings
+        sample_count = $sampleFindings.Count
+        full_output = if ($OutFile) { [System.IO.Path]::GetFullPath($OutFile) } else { $null }
+    } | ConvertTo-Json -Compress -Depth 20
+} else {
+    $json
+}
 if ($decision -eq 'ALLOW') {
     exit 0
 }

@@ -4,7 +4,14 @@ param(
 
     [string]$RunId,
 
-    [switch]$RequireRunLabels
+    [switch]$RequireRunLabels,
+
+    [string]$OutFile = "",
+
+    [switch]$Compact,
+
+    [ValidateRange(1, 100)]
+    [int]$MaxDisplayedFindings = 12
 )
 
 $ErrorActionPreference = 'Stop'
@@ -94,6 +101,33 @@ function Protect-ObservedValue {
     $text = $text -replace '(?i)(/Users/)[^/\s]+', '$1[REDACTED]'
 
     return $text
+}
+
+function Limit-CompactText {
+    param(
+        [object]$Value,
+        [int]$MaxLength
+    )
+
+    $text = ConvertTo-StringValue $Value
+    if ($text.Length -le $MaxLength) {
+        return $text
+    }
+    return $text.Substring(0, $MaxLength) + '...'
+}
+
+function ConvertTo-CompactFinding {
+    param([object]$Finding)
+
+    [pscustomobject]@{
+        decision = $Finding.decision
+        severity = $Finding.severity
+        source = $Finding.source
+        field = $Finding.field
+        observed = Limit-CompactText $Finding.observed 240
+        reason = Limit-CompactText $Finding.reason 200
+        required_action = Limit-CompactText $Finding.required_action 200
+    }
 }
 
 function Test-RemoteEndpoint {
@@ -547,5 +581,49 @@ $result = [pscustomobject]@{
     findings = @($findings)
 }
 
-$result | ConvertTo-Json -Depth 20
+$json = $result | ConvertTo-Json -Depth 20
+if ($OutFile) {
+    $parent = Split-Path -Parent $OutFile
+    if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+    Set-Content -LiteralPath $OutFile -Value $json -Encoding UTF8
+}
+
+if ($Compact) {
+    $decisionRankForDisplay = @{
+        'BLOCK' = 0
+        'ASK' = 1
+        'REPLACE' = 2
+        'ALLOW' = 3
+    }
+    $severityRankForDisplay = @{
+        'CRITICAL' = 0
+        'HIGH' = 1
+        'WARN' = 2
+        'INFO' = 3
+    }
+    $displayedFindings = @(
+        $findings |
+            Sort-Object @{ Expression = { $decisionRankForDisplay[$_.decision] } }, @{ Expression = { $severityRankForDisplay[$_.severity] } }, source, field |
+            Select-Object -First $MaxDisplayedFindings
+    )
+    $sampleFindings = @($displayedFindings | ForEach-Object { ConvertTo-CompactFinding $_ })
+    $compactResult = [pscustomobject]@{
+        output_mode = 'compact'
+        schema_version = 1
+        decision = $decision
+        finding_count = $findings.Count
+        decision_counts = [pscustomobject]@{
+            BLOCK = @($findings | Where-Object { $_.decision -eq 'BLOCK' }).Count
+            ASK = @($findings | Where-Object { $_.decision -eq 'ASK' }).Count
+            REPLACE = @($findings | Where-Object { $_.decision -eq 'REPLACE' }).Count
+            ALLOW = @($findings | Where-Object { $_.decision -eq 'ALLOW' }).Count
+        }
+        sample_findings = $sampleFindings
+        sample_count = $sampleFindings.Count
+        full_output = if ($OutFile) { [System.IO.Path]::GetFullPath($OutFile) } else { $null }
+    }
+    $compactResult | ConvertTo-Json -Compress -Depth 20
+} else {
+    $json
+}
 exit $decisionRank[$decision]

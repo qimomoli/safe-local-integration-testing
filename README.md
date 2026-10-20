@@ -34,6 +34,7 @@ Many applications keep production or remote endpoints in checked-in config. That
 - Resource ownership through an environment manifest, compose project, and `com.qimomoli.test-run=<run_id>` labels.
 - Failure and interruption handling with a minimal diagnostic bundle.
 - Optional machine-readable safety checks for rendered Compose JSON.
+- Compact runtime summaries with full safety findings saved as local diagnostic artifacts.
 
 ## What It Does Not Do
 
@@ -126,8 +127,8 @@ The safety gate defaults unknown Docker contexts, ownership, credentials, and fa
 The repository includes static checks that do not start Docker or delete resources:
 
 ```powershell
-pwsh -NoProfile -File skills/safe-local-docker-integration/scripts/safety-gate.ps1 -InputPath rendered-compose.json -RunId run-001 -RequireRunLabels
-pwsh -NoProfile -File skills/safe-local-docker-integration/scripts/cleanup-guard.ps1 -ManifestPath manifest.json -ResourcesPath resources.json
+pwsh -NoProfile -File skills/safe-local-docker-integration/scripts/safety-gate.ps1 -InputPath rendered-compose.json -RunId run-001 -RequireRunLabels -Compact -OutFile safety-gate.json
+pwsh -NoProfile -File skills/safe-local-docker-integration/scripts/cleanup-guard.ps1 -ManifestPath manifest.json -ResourcesPath resources.json -Compact -OutFile cleanup-guard.json
 ```
 
 Exit codes:

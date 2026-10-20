@@ -119,5 +119,35 @@ Assert-True ($missingManifestProject.ExitCode -eq 30) 'Missing manifest compose 
 Assert-True ($missingManifestProject.Json.decision -eq 'BLOCK') 'Missing manifest compose project was not reported as BLOCK.'
 Assert-True ($missingManifestProject.Output -notmatch [regex]::Escape((Resolve-Path (Join-Path $fixtures 'cleanup-resources-allowed.json')).Path)) 'Cleanup guard output leaked the absolute resources path.'
 
+$compactGateArtifact = Join-Path ([System.IO.Path]::GetTempPath()) ("safe-local-gate-" + [guid]::NewGuid().ToString('N') + '.json')
+$compactCleanupArtifact = Join-Path ([System.IO.Path]::GetTempPath()) ("safe-local-cleanup-" + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    $compactGate = Invoke-JsonCommand -Script $scanner -Arguments @(
+        '-InputPath', (Join-Path $fixtures 'blocked-production.json'),
+        '-RunId', 'run-001',
+        '-RequireRunLabels',
+        '-Compact',
+        '-OutFile', $compactGateArtifact
+    )
+    Assert-True ($compactGate.ExitCode -eq 30) 'Compact safety gate changed the BLOCK exit code.'
+    Assert-True ($compactGate.Json.output_mode -eq 'compact') 'Compact safety gate did not identify its output mode.'
+    Assert-True ($compactGate.Json.sample_count -le 12) 'Compact safety gate exceeded the sample limit.'
+    Assert-True (Test-Path -LiteralPath $compactGateArtifact) 'Compact safety gate did not write its full artifact.'
+    $compactGateFull = Get-Content -LiteralPath $compactGateArtifact -Raw | ConvertFrom-Json
+    Assert-True ($compactGateFull.finding_count -gt 0) 'Compact safety gate artifact lost full findings.'
+
+    $compactCleanup = Invoke-JsonCommand -Script $cleanupGuard -Arguments @(
+        '-ManifestPath', (Join-Path $fixtures 'cleanup-manifest.json'),
+        '-ResourcesPath', (Join-Path $fixtures 'cleanup-resources-unowned.json'),
+        '-Compact',
+        '-OutFile', $compactCleanupArtifact
+    )
+    Assert-True ($compactCleanup.ExitCode -eq 30) 'Compact cleanup guard changed the BLOCK exit code.'
+    Assert-True ($compactCleanup.Json.output_mode -eq 'compact') 'Compact cleanup guard did not identify its output mode.'
+    Assert-True (Test-Path -LiteralPath $compactCleanupArtifact) 'Compact cleanup guard did not write its full artifact.'
+} finally {
+    Remove-Item -LiteralPath $compactGateArtifact, $compactCleanupArtifact -Force -ErrorAction SilentlyContinue
+}
+
 Write-Output 'Safety gate and cleanup ownership tests passed.'
 exit 0

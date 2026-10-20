@@ -2,7 +2,7 @@
 
 Use this gate before starting local Docker integration services and again before functional tests.
 
-For rendered Docker Compose JSON, run `scripts/safety-gate.ps1` when available. The script is a static gate: it does not start Docker, create files, or clean resources. It returns machine-readable JSON and exits with `0` for `ALLOW`, `10` for `REPLACE`, `20` for `ASK`, and `30` for `BLOCK`.
+For rendered Docker Compose JSON, run `scripts/safety-gate.ps1` when available. The script is a static gate: it does not start Docker or clean resources; it writes a diagnostic artifact only when `-OutFile` is provided. It returns machine-readable JSON and exits with `0` for `ALLOW`, `10` for `REPLACE`, `20` for `ASK`, and `30` for `BLOCK`.
 
 ## Decision Protocol
 

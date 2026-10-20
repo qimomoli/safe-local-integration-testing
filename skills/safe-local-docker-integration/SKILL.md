@@ -11,6 +11,12 @@ Use this skill for any project where local Docker integration testing must be is
 
 This skill is an operating procedure, not a security sandbox. Docker daemon permissions, network policy, credential management, and CI isolation remain required controls.
 
+Runtime evidence budget: prefer machine-readable summaries on stdout and save full findings to the current generated workspace. Do not read or paste full compose output, environment dumps, scan JSON, or unbounded logs. Expand a saved artifact only when its summary reports a blocker or when a specific file/line is needed for the next decision.
+
+- Logs: use `docker compose logs --no-color --tail 80 <service>` and inspect one service at a time.
+- Inspect/HTTP: request selected fields or status plus a short body excerpt; never dump raw `docker inspect`, Swagger, HTML, or large JSON responses.
+- Retries: allow at most two bounded retries per failing hop. Reuse saved artifacts and rerun a scan only after the generated config changes.
+
 When `confirm-before-work` or an equivalent workspace-write confirmation rule is active, that rule is the authoritative confirmation protocol. If it is not available, use the built-in Side-Effect Confirmation section below. This skill decides what is safe to create or clean; it does not bypass required confirmation before side effects.
 
 ## Side-Effect Confirmation
@@ -60,12 +66,12 @@ Run these phases in order. A blocker in one phase stops later phases.
 1. **PREFLIGHT**: identify the smallest complete integration scope, define the real entry point and real exit for the changed behavior, map every changed service boundary, inspect project docs and source runtime config, verify required tools, and prove the Docker context is local and intended.
 2. **PREPARE**: create a unique run id, workspace, environment manifest, local-only overrides, mock configuration, and test data namespace outside the application repository.
 3. **RENDER**: render effective configuration, such as `docker compose config`, and collect image, endpoint, mount, port, secret, network, and namespace evidence.
-4. **SAFETY_GATE**: apply [references/safety-gate.md](references/safety-gate.md) and, when possible, `scripts/safety-gate.ps1` to generated files, rendered output, process environment, and any live runtime configuration. Continue only with `ALLOW` or after every `REPLACE` is applied and rechecked.
+4. **SAFETY_GATE**: apply [references/safety-gate.md](references/safety-gate.md) and run `scripts/safety-gate.ps1 -Compact -OutFile <workspace>\safety-gate.json` against rendered JSON when available. Continue only with `ALLOW` or after every `REPLACE` is applied and rechecked; inspect full findings only for a reported blocker or required replacement.
 5. **START**: start only the selected compose project and only after the gate has no blockers. Do not use global prune or cleanup commands.
 6. **HEALTH_CHECK**: verify infrastructure readiness and record the actual container, network, volume, and port identities.
 7. **FUNCTIONAL_TEST**: run the complete entry-to-exit business path for the changed behavior. Use the real entry point, real containers, real protocols, real downstream dependencies inside the changed path, and verify the real exit. Health checks, single-service checks, and mock-only checks are supplementary evidence and cannot produce a passing integration-test verdict for a cross-service change.
 8. **REPORT**: use [references/report-template.md](references/report-template.md). Include browser URL and navigation steps when a human must inspect a UI.
-9. **CLEANUP**: after success, remove only resources proven by the manifest, project name, and labels to belong to this run. After failure or interruption, preserve the diagnostic bundle and perform only ownership-proven cleanup.
+9. **CLEANUP**: run `scripts/cleanup-guard.ps1 -Compact -OutFile <workspace>\cleanup-guard.json` when a manifest and resource inventory are available, then remove only resources proven by the manifest, project name, and labels to belong to this run. After failure or interruption, preserve the diagnostic bundle and perform only ownership-proven cleanup.
 
 If generated or effective runtime config cannot prove that runtime endpoints are local and test-only, stop and report the blocker instead of starting containers. Do not stop merely because a checked-in source file contains production values that will be overridden in the generated test workspace.
 
